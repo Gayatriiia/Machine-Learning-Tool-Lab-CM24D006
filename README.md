@@ -20,7 +20,7 @@ Click on the links below to navigate through the lab submissions:
 | **📁 Hello Tensor Flow** | Introductory concepts and environment setup for TFJS. | [Explore Setup](./Hello%20Tensor%20FLow) |
 | **📁 Practical 1** | Implementation of Linear Regression and basic model building. | [Explore Practical 1](./Practical%201) |
 | **📁 Practical 2** | **Digit Recognition (MNIST)**: Training a CNN to recognize hand-drawn digits. | [Explore Practical 2](./Practical%202) |
-| **📁 Project Lab** | Advanced assignments and browser-based AI deployments. | [Explore Projects](./Assingment1) |
+
 
 ---
 
