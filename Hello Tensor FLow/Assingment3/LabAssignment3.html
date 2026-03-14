@@ -1,37 +1,97 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Tensor Reshape vs Flatten</title>
+<meta charset="UTF-8">
+<title>TensorFlow.js Reshape vs Flatten</title>
 
-    <!-- TensorFlow.js CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+<!-- TensorFlow.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+
+<style>
+body{
+    font-family: Arial, sans-serif;
+    background:#f4f6f9;
+    text-align:center;
+    padding:40px;
+}
+
+.container{
+    background:white;
+    width:500px;
+    margin:auto;
+    padding:30px;
+    border-radius:10px;
+    box-shadow:0 0 10px rgba(0,0,0,0.1);
+}
+
+button{
+    padding:10px 20px;
+    margin:10px;
+    border:none;
+    background:#4CAF50;
+    color:white;
+    font-size:16px;
+    border-radius:5px;
+    cursor:pointer;
+}
+
+button:hover{
+    background:#45a049;
+}
+
+.output{
+    margin-top:20px;
+    padding:15px;
+    background:#f0f0f0;
+    border-radius:5px;
+    text-align:left;
+}
+</style>
 </head>
+
 <body>
 
-<h2>Tensor Reshape vs Flatten (Check Console)</h2>
+<div class="container">
+
+<h2>Tensor Reshape vs Flatten</h2>
+
+<p>Original Tensor: [1,2,3,4,5,6] → Shape (2 × 3)</p>
+
+<button onclick="reshapeTensor()">Reshape (3 × 2)</button>
+<button onclick="flattenTensor()">Flatten</button>
+
+<div class="output" id="result">
+Click a button to see tensor result...
+</div>
+
+</div>
 
 <script>
-    // Create a 2D tensor
-    const tensor = tf.tensor2d([1, 2, 3, 4, 5, 6], [2, 3]);
 
-    console.log("Original Tensor:");
-    tensor.print();
-    console.log("Original Shape:", tensor.shape);
+const tensor = tf.tensor2d([1,2,3,4,5,6],[2,3]);
 
-    // Reshape the tensor
-    const reshapedTensor = tensor.reshape([3, 2]);
+function reshapeTensor(){
 
-    console.log("Reshaped Tensor (3x2):");
-    reshapedTensor.print();
-    console.log("Reshaped Shape:", reshapedTensor.shape);
+    const reshaped = tensor.reshape([3,2]);
 
-    // Flatten the tensor
-    const flattenedTensor = tensor.flatten();
+    document.getElementById("result").innerHTML =
+    "<b>Reshaped Tensor (3x2)</b><br>" +
+    reshaped.arraySync() +
+    "<br><br>Shape: " + reshaped.shape;
 
-    console.log("Flattened Tensor:");
-    flattenedTensor.print();
-    console.log("Flattened Shape:", flattenedTensor.shape);
+}
+
+function flattenTensor(){
+
+    const flattened = tensor.flatten();
+
+    document.getElementById("result").innerHTML =
+    "<b>Flattened Tensor</b><br>" +
+    flattened.arraySync() +
+    "<br><br>Shape: " + flattened.shape;
+
+}
+
 </script>
 
 </body>
