@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>RNN vs Dense Sentiment Comparison</title>
+
+<!-- TensorFlow.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+
+</head>
+
+<body>
+
+<h2>RNN vs Dense Network Sentiment Analysis</h2>
+
+<button onclick="trainModels()">Train Models</button>
+
+<p id="denseResult"></p>
+<p id="rnnResult"></p>
+
+<script>
+
+const sentences = [
+"i love this movie",
+"this product is amazing",
+"i feel happy",
+"this is a great day",
+"i hate this movie",
+"this product is bad",
+"i feel sad",
+"this is terrible"
+]
+
+const labels = [1,1,1,1,0,0,0,0]
+
+// Convert sentence to simple numeric feature (length)
+const xs = tf.tensor2d(sentences.map(s => [s.length]))
+const ys = tf.tensor2d(labels.map(l => [l]))
+
+async function trainModels(){
+
+/* Dense Network */
+
+const denseModel = tf.sequential()
+
+denseModel.add(tf.layers.dense({
+units:8,
+inputShape:[1],
+activation:'relu'
+}))
+
+denseModel.add(tf.layers.dense({
+units:1,
+activation:'sigmoid'
+}))
+
+denseModel.compile({
+optimizer:'adam',
+loss:'binaryCrossentropy',
+metrics:['accuracy']
+})
+
+let denseHistory = await denseModel.fit(xs,ys,{
+epochs:50
+})
+
+let denseAcc = denseHistory.history.acc ?
+denseHistory.history.acc[49] :
+denseHistory.history.accuracy[49]
+
+document.getElementById("denseResult").innerHTML =
+"Dense Network Accuracy: "+denseAcc.toFixed(2)
+
+
+
+/* RNN Model */
+
+const xsRNN = tf.tensor3d(sentences.map(s=>[[s.length]]))
+
+const rnnModel = tf.sequential()
+
+rnnModel.add(tf.layers.simpleRNN({
+units:8,
+inputShape:[1,1]
+}))
+
+rnnModel.add(tf.layers.dense({
+units:1,
+activation:'sigmoid'
+}))
+
+rnnModel.compile({
+optimizer:'adam',
+loss:'binaryCrossentropy',
+metrics:['accuracy']
+})
+
+let rnnHistory = await rnnModel.fit(xsRNN,ys,{
+epochs:50
+})
+
+let rnnAcc = rnnHistory.history.acc ?
+rnnHistory.history.acc[49] :
+rnnHistory.history.accuracy[49]
+
+document.getElementById("rnnResult").innerHTML =
+"RNN Model Accuracy: "+rnnAcc.toFixed(2)
+
+}
+
+</script>
+
+</body>
+</html>
