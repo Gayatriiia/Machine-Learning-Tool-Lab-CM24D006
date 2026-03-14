@@ -1,69 +1,143 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Prediction on Unseen Data</title>
+<meta charset="UTF-8">
+<title>Prediction on Unseen Data</title>
 
-    <!-- TensorFlow.js CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
-</head>
-<body>
+<!-- TensorFlow.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
 
-<h2>Prediction on Unseen Inputs</h2>
-<pre id="output"></pre>
-
-<script>
-async function runPrediction() {
-
-    // 1️⃣ Training data (y = 2x)
-    const xTrain = [];
-    const yTrain = [];
-
-    for (let i = 0; i < 20; i++) {
-        xTrain.push(i);
-        yTrain.push(2 * i);
-    }
-
-    const xs = tf.tensor2d(xTrain, [xTrain.length, 1]);
-    const ys = tf.tensor2d(yTrain, [yTrain.length, 1]);
-
-    // 2️⃣ Build model
-    const model = tf.sequential();
-    model.add(tf.layers.dense({ units: 1, inputShape: [1] }));
-
-    model.compile({
-        optimizer: tf.train.sgd(0.01),
-        loss: 'meanSquaredError'
-    });
-
-    // 3️⃣ Train model
-    await model.fit(xs, ys, {
-        epochs: 100,
-        verbose: 0
-    });
-
-    // 4️⃣ Unseen test inputs
-    const unseenInputs = [25, 30, 35];
-    const unseenTensor = tf.tensor2d(unseenInputs, [unseenInputs.length, 1]);
-
-    // 5️⃣ Predictions
-    const predictions = model.predict(unseenTensor);
-    const predictedValues = predictions.dataSync();
-
-    // 6️⃣ Display results
-    let resultText = "Input\tExpected\tPredicted\n";
-    resultText += "---------------------------------\n";
-
-    unseenInputs.forEach((x, i) => {
-        const expected = 2 * x;
-        const predicted = predictedValues[i].toFixed(2);
-        resultText += `${x}\t${expected}\t\t${predicted}\n`;
-    });
-
-    document.getElementById("output").textContent = resultText;
+<style>
+body{
+    font-family: Arial, sans-serif;
+    text-align:center;
+    background:#f2f2f2;
+    padding:30px;
 }
 
-runPrediction();
+.container{
+    background:white;
+    width:450px;
+    margin:auto;
+    padding:20px;
+    border-radius:8px;
+    box-shadow:0 0 10px rgba(0,0,0,0.1);
+}
+
+button{
+    padding:10px 20px;
+    font-size:16px;
+    background:#007bff;
+    color:white;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+}
+
+button:hover{
+    background:#0056b3;
+}
+
+table{
+    width:100%;
+    margin-top:20px;
+    border-collapse:collapse;
+}
+
+th, td{
+    border:1px solid #ccc;
+    padding:8px;
+}
+
+th{
+    background:#eaeaea;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h2>Prediction on Unseen Inputs</h2>
+
+<button onclick="runPrediction()">Run Prediction</button>
+
+<div id="status"></div>
+
+<table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Expected</th>
+<th>Predicted</th>
+</tr>
+</thead>
+
+<tbody id="output"></tbody>
+</table>
+
+</div>
+
+<script>
+
+async function runPrediction() {
+
+document.getElementById("status").innerText="Training model...";
+
+const xTrain = [];
+const yTrain = [];
+
+// Training data
+for (let i = 0; i < 20; i++) {
+    xTrain.push(i);
+    yTrain.push(2 * i);
+}
+
+const xs = tf.tensor2d(xTrain, [xTrain.length, 1]);
+const ys = tf.tensor2d(yTrain, [yTrain.length, 1]);
+
+// Build model
+const model = tf.sequential();
+model.add(tf.layers.dense({ units: 1, inputShape: [1] }));
+
+model.compile({
+    optimizer: tf.train.sgd(0.01),
+    loss: 'meanSquaredError'
+});
+
+// Train model
+await model.fit(xs, ys, { epochs: 100 });
+
+document.getElementById("status").innerText="Model trained successfully";
+
+// Unseen inputs
+const unseenInputs = [25, 30, 35];
+const unseenTensor = tf.tensor2d(unseenInputs, [unseenInputs.length, 1]);
+
+// Predictions
+const predictions = model.predict(unseenTensor);
+const predictedValues = predictions.dataSync();
+
+let rows = "";
+
+unseenInputs.forEach((x, i) => {
+    const expected = 2 * x;
+    const predicted = predictedValues[i].toFixed(2);
+
+    rows += `
+    <tr>
+        <td>${x}</td>
+        <td>${expected}</td>
+        <td>${predicted}</td>
+    </tr>
+    `;
+});
+
+document.getElementById("output").innerHTML = rows;
+
+}
+
 </script>
 
 </body>
