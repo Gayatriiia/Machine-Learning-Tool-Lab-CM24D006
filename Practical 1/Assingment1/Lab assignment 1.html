@@ -1,94 +1,163 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Regression Model - Predicted vs Actual</title>
+<meta charset="UTF-8">
+<title>TensorFlow.js Regression Demo</title>
 
-    <!-- TensorFlow.js CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+<!-- TensorFlow.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
 
-    <!-- Chart.js CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+
+body{
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg,#667eea,#764ba2);
+    height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.container{
+    background:white;
+    padding:30px;
+    border-radius:12px;
+    width:700px;
+    text-align:center;
+    box-shadow:0 10px 25px rgba(0,0,0,0.2);
+}
+
+h2{
+    margin-bottom:10px;
+}
+
+button{
+    padding:12px 25px;
+    border:none;
+    background:#667eea;
+    color:white;
+    font-size:16px;
+    border-radius:6px;
+    cursor:pointer;
+}
+
+button:hover{
+    background:#5563d1;
+}
+
+#status{
+    margin-top:10px;
+    font-weight:bold;
+}
+
+.chartBox{
+    margin-top:25px;
+}
+
+</style>
+
 </head>
+
 <body>
 
-<h2>Regression Model (Predicted vs Actual)</h2>
-<canvas id="myChart" width="600" height="400"></canvas>
+<div class="container">
+
+<h2>Regression Model</h2>
+<p>Predicted vs Actual using TensorFlow.js</p>
+
+<button onclick="trainAndPlot()">Train Model</button>
+
+<div id="status">Click the button to start training</div>
+
+<div class="chartBox">
+<canvas id="myChart"></canvas>
+</div>
+
+</div>
 
 <script>
-    async function trainAndPlot() {
 
-        // 1️⃣ Generate synthetic data (y = 2x + noise)
-        const xValues = [];
-        const yValues = [];
+let chart;
 
-        for (let i = 0; i < 50; i++) {
-            let x = i;
-            let y = 2 * x + Math.random() * 10; // noise
-            xValues.push(x);
-            yValues.push(y);
-        }
+async function trainAndPlot(){
 
-        // Convert to tensors
-        const xs = tf.tensor2d(xValues, [xValues.length, 1]);
-        const ys = tf.tensor2d(yValues, [yValues.length, 1]);
+document.getElementById("status").innerText="Training model... please wait ⏳";
 
-        // 2️⃣ Build regression model
-        const model = tf.sequential();
-        model.add(tf.layers.dense({ units: 1, inputShape: [1] }));
+const xValues=[];
+const yValues=[];
 
-        model.compile({
-            optimizer: tf.train.sgd(0.01),
-            loss: 'meanSquaredError'
-        });
+// Generate synthetic data
+for(let i=0;i<50;i++){
+    let x=i;
+    let y=2*x + Math.random()*10;
+    xValues.push(x);
+    yValues.push(y);
+}
 
-        // 3️⃣ Train the model
-        await model.fit(xs, ys, {
-            epochs: 100,
-            verbose: 0
-        });
+const xs=tf.tensor2d(xValues,[xValues.length,1]);
+const ys=tf.tensor2d(yValues,[yValues.length,1]);
 
-        // 4️⃣ Make predictions
-        const predictions = model.predict(xs);
-        const predictedValues = predictions.dataSync();
+// Build model
+const model=tf.sequential();
+model.add(tf.layers.dense({units:1,inputShape:[1]}));
 
-        // 5️⃣ Plot Actual vs Predicted
-        const ctx = document.getElementById('myChart').getContext('2d');
+model.compile({
+optimizer:tf.train.sgd(0.01),
+loss:'meanSquaredError'
+});
 
-        new Chart(ctx, {
-            type: 'scatter',
-            data: {
-                datasets: [
-                    {
-                        label: 'Actual Values',
-                        data: xValues.map((x, i) => ({ x: x, y: yValues[i] }))
-                    },
-                    {
-                        label: 'Predicted Values',
-                        data: xValues.map((x, i) => ({ x: x, y: predictedValues[i] }))
-                    }
-                ]
-            },
-            options: {
-                scales: {
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'X'
-                        }
-                    },
-                    y: {
-                        title: {
-                            display: true,
-                            text: 'Y'
-                        }
-                    }
-                }
-            }
-        });
-    }
+// Train
+await model.fit(xs,ys,{epochs:100});
 
-    trainAndPlot();
+// Predict
+const predictions=model.predict(xs);
+const predictedValues=predictions.dataSync();
+
+document.getElementById("status").innerText="Model trained successfully ✅";
+
+// Destroy old chart if exists
+if(chart){
+chart.destroy();
+}
+
+// Plot chart
+const ctx=document.getElementById("myChart").getContext("2d");
+
+chart=new Chart(ctx,{
+type:'scatter',
+data:{
+datasets:[
+{
+label:'Actual Values',
+data:xValues.map((x,i)=>({x:x,y:yValues[i]}))
+},
+{
+label:'Predicted Values',
+data:xValues.map((x,i)=>({x:x,y:predictedValues[i]}))
+}
+]
+},
+options:{
+responsive:true,
+plugins:{
+legend:{position:'top'}
+},
+scales:{
+x:{
+title:{display:true,text:'X Value'}
+},
+y:{
+title:{display:true,text:'Y Value'}
+}
+}
+}
+});
+
+}
+
 </script>
 
 </body>
