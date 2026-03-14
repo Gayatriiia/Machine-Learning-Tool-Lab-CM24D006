@@ -1,117 +1,162 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Learning Rate vs Convergence</title>
+<meta charset="UTF-8">
+<title>TensorFlow.js Regression Demo</title>
 
-    <!-- TensorFlow.js CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+<!-- Bootstrap CDN -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
-    <!-- Chart.js CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- TensorFlow.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body{
+background:#f5f7fb;
+}
+
+.header{
+background:#4e73df;
+color:white;
+padding:15px;
+text-align:center;
+font-weight:bold;
+}
+
+.chart-container{
+height:400px;
+}
+
+.status-box{
+font-weight:bold;
+margin-top:10px;
+}
+</style>
+
 </head>
 <body>
 
-<h2>Effect of Learning Rate on Model Convergence</h2>
-<canvas id="lossChart" width="700" height="400"></canvas>
+<div class="header">
+TensorFlow.js Regression Model (Predicted vs Actual)
+</div>
 
+<div class="container mt-5">
+
+<div class="row justify-content-center">
+
+<div class="col-md-8">
+
+<div class="card shadow">
+
+<div class="card-body text-center">
+
+<h4 class="mb-3">Train Linear Regression Model</h4>
+
+<p>This demo trains a regression model using synthetic data.</p>
+
+<button class="btn btn-primary" onclick="trainAndPlot()">Train Model</button>
+
+<div id="status" class="status-box text-success">
+Click the button to start training
+</div>
+
+<div class="chart-container mt-4">
+<canvas id="myChart"></canvas>
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
 <script>
-    async function runExperiment() {
 
-        // Generate synthetic data: y = 2x + noise
-        const xVals = [];
-        const yVals = [];
+let chart;
 
-        for (let i = 0; i < 50; i++) {
-            xVals.push(i);
-            yVals.push(2 * i + Math.random() * 10);
-        }
+async function trainAndPlot(){
 
-        const xs = tf.tensor2d(xVals, [xVals.length, 1]);
-        const ys = tf.tensor2d(yVals, [yVals.length, 1]);
+document.getElementById("status").innerHTML="Training model... please wait ⏳";
 
-        // Learning rates to test
-        const learningRates = [0.001, 0.01, 0.1];
-        const lossHistory = [];
+const xValues=[];
+const yValues=[];
 
-        for (let lr of learningRates) {
+// Generate synthetic data
+for(let i=0;i<50;i++){
+let x=i;
+let y=2*x + Math.random()*10;
+xValues.push(x);
+yValues.push(y);
+}
 
-            // Create model
-            const model = tf.sequential();
-            model.add(tf.layers.dense({ units: 1, inputShape: [1] }));
+const xs=tf.tensor2d(xValues,[xValues.length,1]);
+const ys=tf.tensor2d(yValues,[yValues.length,1]);
 
-            model.compile({
-                optimizer: tf.train.sgd(lr),
-                loss: 'meanSquaredError'
-            });
+// Build model
+const model=tf.sequential();
+model.add(tf.layers.dense({units:1,inputShape:[1]}));
 
-            const losses = [];
+model.compile({
+optimizer:tf.train.sgd(0.01),
+loss:'meanSquaredError'
+});
 
-            // Train model
-            await model.fit(xs, ys, {
-                epochs: 50,
-                callbacks: {
-                    onEpochEnd: (epoch, logs) => {
-                        losses.push(logs.loss);
-                    }
-                }
-            });
+// Train model
+await model.fit(xs,ys,{epochs:100});
 
-            lossHistory.push(losses);
-        }
+// Predict
+const predictions=model.predict(xs);
+const predictedValues=predictions.dataSync();
 
-        // Plot Loss vs Epochs
-        const ctx = document.getElementById('lossChart').getContext('2d');
+document.getElementById("status").innerHTML="Model trained successfully ✅";
+    // Destroy old chart
+if(chart){
+chart.destroy();
+}
 
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: Array.from({ length: 50 }, (_, i) => i + 1),
-                datasets: [
-                    {
-                        label: 'Learning Rate = 0.001',
-                        data: lossHistory[0],
-                        fill: false
-                    },
-                    {
-                        label: 'Learning Rate = 0.01',
-                        data: lossHistory[1],
-                        fill: false
-                    },
-                    {
-                        label: 'Learning Rate = 0.1',
-                        data: lossHistory[2],
-                        fill: false
-                    }
-                ]
-            },
-            options: {
-                plugins: {
-                    title: {
-                        display: true,
-                        text: 'Loss vs Epochs for Different Learning Rates'
-                    }
-                },
-                scales: {
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'Epochs'
-                        }
-                    },
-                    y: {
-                        title: {
-                            display: true,
-                            text: 'Loss'
-                        }
-                    }
-                }
-            }
-        });
-    }
+// Plot chart
+const ctx=document.getElementById("myChart").getContext("2d");
 
-    runExperiment();
+chart=new Chart(ctx,{
+type:'scatter',
+data:{
+datasets:[
+{
+label:'Actual Values',
+data:xValues.map((x,i)=>({x:x,y:yValues[i]}))
+},
+{
+label:'Predicted Values',
+data:xValues.map((x,i)=>({x:x,y:predictedValues[i]}))
+}
+]
+},
+options:{
+responsive:true,
+plugins:{
+legend:{position:'top'}
+},
+scales:{
+x:{
+title:{display:true,text:'X Value'}
+},
+y:{
+title:{display:true,text:'Y Value'}
+}
+}
+}
+});
+
+}
+
 </script>
 
 </body>
 </html>
+
