@@ -1,33 +1,101 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>TensorFlow.js Tensors Example</title>
+<meta charset="UTF-8">
+<title>TensorFlow.js Tensor Demo</title>
 
-  <!-- TensorFlow.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+<!-- TensorFlow.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+
+<style>
+body{
+    font-family: Arial, sans-serif;
+    background: linear-gradient(135deg,#6a11cb,#2575fc);
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    margin:0;
+}
+
+.container{
+    background:white;
+    padding:30px;
+    border-radius:12px;
+    width:400px;
+    text-align:center;
+    box-shadow:0 10px 25px rgba(0,0,0,0.2);
+}
+
+h2{
+    margin-bottom:20px;
+}
+
+button{
+    padding:10px 15px;
+    margin:8px;
+    border:none;
+    border-radius:6px;
+    cursor:pointer;
+    background:#2575fc;
+    color:white;
+    font-weight:bold;
+}
+
+button:hover{
+    background:#1a5edb;
+}
+
+#output{
+    margin-top:20px;
+    padding:15px;
+    background:#f4f4f4;
+    border-radius:6px;
+    min-height:60px;
+    font-family:monospace;
+}
+</style>
 </head>
+
 <body>
-  <h2>Open Console to See Tensor Outputs</h2>
 
-  <script>
-    // 1️⃣ Scalar (0D tensor)
+<div class="container">
+<h2>TensorFlow.js Tensor Demo</h2>
+
+<button onclick="showScalar()">Scalar</button>
+<button onclick="showVector()">Vector</button>
+<button onclick="showMatrix()">Matrix</button>
+
+<div id="output">Click a button to generate tensor</div>
+</div>
+
+<script>
+
+function showScalar(){
     const scalar = tf.scalar(5);
-    console.log("Scalar:");
+    document.getElementById("output").innerText =
+        "Scalar (0D Tensor): 5";
     scalar.print();
+}
 
-    // 2️⃣ Vector (1D tensor)
-    const vector = tf.tensor([1, 2, 3, 4]);
-    console.log("Vector:");
+function showVector(){
+    const vector = tf.tensor([1,2,3,4]);
+    document.getElementById("output").innerText =
+        "Vector (1D Tensor): [1, 2, 3, 4]";
     vector.print();
+}
 
-    // 3️⃣ Matrix (2D tensor)
+function showMatrix(){
     const matrix = tf.tensor([
-      [1, 2, 3],
-      [4, 5, 6]
+        [1,2,3],
+        [4,5,6]
     ]);
-    console.log("Matrix:");
+    document.getElementById("output").innerText =
+        "Matrix (2D Tensor):\n[1,2,3]\n[4,5,6]";
     matrix.print();
-  </script>
+}
+
+</script>
+
 </body>
 </html>
