@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MobileNet FPS Analyzer</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+  <style>
+    body { font-family: sans-serif; background: #0e0e0e; color: #eee; text-align: center; padding: 20px; }
+    .container { position: relative; display: inline-block; }
+    video  { display: block; width: 480px; height: 360px; }
+    canvas { position: absolute; top: 0; left: 0; width: 480px; height: 360px; }
+    button { margin: 10px 6px; padding: 10px 22px; font-size: 14px; cursor: pointer; background: #222; color: #fff; border: 1px solid #444; border-radius: 4px; }
+    button:hover { background: #333; }
+
+    .stats {
+      display: flex; flex-wrap: wrap; justify-content: center;
+      gap: 12px; margin: 18px auto; max-width: 620px;
+    }
+    .card {
+      background: #1a1a1a; border: 1px solid #2a2a2a;
+      border-radius: 8px; padding: 14px 20px; min-width: 130px;
+    }
+    .card .val { font-size: 28px; font-weight: bold; color: #4fc; }
+    .card .lbl { font-size: 12px; color: #888; margin-top: 4px; }
+
+    #log {
+      background: #111; border: 1px solid #222; border-radius: 6px;
+      max-width: 620px; margin: 0 auto; padding: 10px 14px;
+      height: 120px; overflow-y: auto;
+      font-family: monospace; font-size: 12px; text-align: left; color: #aaa;
+    }
+    #status { color: #888; font-size: 13px; margin: 8px 0; }
+  </style>
+</head>
+<body>
+
+<h2>⚡ MobileNet — FPS & Performance Analyzer</h2>
+
+<div class="container">
+  <video id="video" autoplay muted playsinline></video>
+  <canvas id="canvas"></canvas>
+</div>
+
+<br>
+<button onclick="startCamera()">▶ Start</button>
+<button onclick="stopCamera()">■ Stop</button>
+<button onclick="clearLog()">🗑 Clear Log</button>
+<div id="status">Loading model…</div>
+
+<!-- Stats cards -->
+<div class="stats">
+  <div class="card"><div class="val" id="fps">0</div><div class="lbl">FPS</div></div>
+  <div class="card"><div class="val" id="inf-time">0ms</div><div class="lbl">Inference Time</div></div>
+  <div class="card"><div class="val" id="avg-fps">0</div><div class="lbl">Avg FPS</div></div>
+  <div class="card"><div class="val" id="avg-inf">0ms</div><div class="lbl">Avg Inference</div></div>
+  <div class="card"><div class="val" id="frames">0</div><div class="lbl">Total Frames</div></div>
+  <div class="card"><div class="val" id="cpu-warn">OK</div><div class="lbl">Load Status</div></div>
+</div>
+
+<div id="log"></div>
+
+<script>
+  const video   = document.getElementById('video');
+  const canvas  = document.getElementById('canvas');
+  const ctx     = canvas.getContext('2d');
+  const statusEl = document.getElementById('status');
+
+  let model, stream, running = false;
+  let frameCount = 0, totalInf = 0;
+  let lastFrameTime = performance.now();
+  let fpsSamples = [], infSamples = [];
+
+  mobilenet.load().then(m => {
+    model = m;
+    statusEl.textContent = 'Model ready. Click Start.';
+    addLog('✅ MobileNet loaded');
+  });
+
+  async function startCamera() {
+    stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    video.srcObject = stream;
+    canvas.width = 480; canvas.height = 360;
+    running = true;
+    frameCount = 0; totalInf = 0; fpsSamples = []; infSamples = [];
+    addLog('📷 Camera started');
+    classify();
+  }
+
+  function stopCamera() {
+    running = false;
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    statusEl.textContent = 'Stopped.';
+    addLog(`🛑 Stopped — ${frameCount} frames, avg FPS: ${avg(fpsSamples).toFixed(1)}, avg inference: ${avg(infSamples).toFixed(0)}ms`);
+  }
+
+  async function classify() {
+    if (!running) return;
+
+    // Measure inference time
+    const t0 = performance.now();
+    const preds = await model.classify(video, 3);
+    const infMs = performance.now() - t0;
+
+    // Measure FPS
+    const now = performance.now();
+    const fps = 1000 / (now - lastFrameTime);
+    lastFrameTime = now;
+
+    frameCount++;
+    totalInf += infMs;
+    fpsSamples.push(fps);
+    infSamples.push(infMs);
+    if (fpsSamples.length > 60) { fpsSamples.shift(); infSamples.shift(); }
+
+    // Update cards
+    document.getElementById('fps').textContent     = fps.toFixed(1);
+    document.getElementById('inf-time').textContent = infMs.toFixed(0) + 'ms';
+    document.getElementById('avg-fps').textContent  = avg(fpsSamples).toFixed(1);
+    document.getElementById('avg-inf').textContent  = avg(infSamples).toFixed(0) + 'ms';
+    document.getElementById('frames').textContent   = frameCount;
+
+    // Load status
+    const load = document.getElementById('cpu-warn');
+    if (fps < 5)       { load.textContent = '🔴 High'; load.style.color = '#f44'; }
+    else if (fps < 15) { load.textContent = '🟡 Med';  load.style.color = '#fa0'; }
+    else               { load.textContent = '🟢 Low';  load.style.color = '#4fc'; }
+
+    // Log every 30 frames
+    if (frameCount % 30 === 0)
+      addLog(`Frame ${frameCount} | FPS: ${fps.toFixed(1)} | Inf: ${infMs.toFixed(0)}ms | Top: ${preds[0].className.split(',')[0]}`);
+
+    // Draw overlay
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // FPS badge top-right
+    ctx.font = 'bold 13px monospace';
+    const fpsLabel = `FPS: ${fps.toFixed(1)}  Inf: ${infMs.toFixed(0)}ms`;
+    const fw = ctx.measureText(fpsLabel).width + 16;
+    ctx.fillStyle = fps < 10 ? 'rgba(200,30,30,0.8)' : 'rgba(0,0,0,0.7)';
+    ctx.beginPath(); ctx.roundRect(canvas.width - fw - 8, 8, fw, 26, 5); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillText(fpsLabel, canvas.width - fw, 25);
+
+    // Prediction labels
+    preds.forEach((p, i) => {
+      const label = `${p.className.split(',')[0]}  ${(p.probability*100).toFixed(1)}%`;
+      const x = 10, y = 12 + i * 42;
+      ctx.font = 'bold 14px sans-serif';
+      const w = ctx.measureText(label).width + 18;
+      ctx.fillStyle = i === 0 ? 'rgba(0,190,100,0.85)' : 'rgba(0,0,0,0.65)';
+      ctx.beginPath(); ctx.roundRect(x, y, w, 28, 5); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillText(label, x + 9, y + 19);
+    });
+
+    statusEl.textContent = `Running… ${frameCount} frames`;
+    requestAnimationFrame(classify);
+  }
+
+  function avg(arr) { return arr.length ? arr.reduce((a,b) => a+b, 0) / arr.length : 0; }
+
+  function addLog(msg) {
+    const log = document.getElementById('log');
+    const t = new Date().toLocaleTimeString();
+    log.innerHTML += `<div>[${t}] ${msg}</div>`;
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function clearLog() { document.getElementById('log').innerHTML = ''; }
+</script>
+</body>
+</html>

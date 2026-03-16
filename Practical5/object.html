@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Real-Time Object Detection</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #111; color: #fff; font-family: monospace;
+    display: flex; flex-direction: column; align-items: center;
+    min-height: 100vh; padding: 30px 16px; gap: 16px;
+  }
+  h1 { font-size: 22px; letter-spacing: 2px; color: #00cfff; }
+  #status { font-size: 13px; color: #aaa; }
+  #controls { display: flex; gap: 10px; }
+  button {
+    padding: 10px 24px; font-size: 13px; font-family: monospace;
+    border: 1px solid #00cfff; background: transparent; color: #00cfff;
+    border-radius: 4px; cursor: pointer; transition: 0.15s;
+  }
+  button:hover:not(:disabled) { background: #00cfff; color: #111; }
+  button:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .container {
+    position: relative; width: 100%; max-width: 700px;
+    background: #000; border-radius: 6px; overflow: hidden;
+    border: 1px solid #333; aspect-ratio: 4/3;
+  }
+
+  /* Only VIDEO is mirrored — canvas is NOT */
+  video {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1); /* selfie mirror */
+  }
+  canvas {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    /* NO transform here — so labels draw correctly */
+  }
+
+  #placeholder {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: #444; font-size: 14px;
+  }
+  #tags {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    justify-content: center; max-width: 700px; min-height: 32px;
+  }
+  .tag {
+    padding: 4px 12px; border-radius: 20px; font-size: 12px;
+    background: rgba(255,255,255,0.07); border: 1px solid;
+  }
+</style>
+</head>
+<body>
+
+<h1>OBJECT DETECTION</h1>
+<div id="status">Loading model…</div>
+
+<div id="controls">
+  <button id="startBtn" disabled>▶ Start Camera</button>
+  <button id="stopBtn"  disabled>■ Stop</button>
+</div>
+
+<div class="container">
+  <video id="video" autoplay muted playsinline></video>
+  <canvas id="canvas"></canvas>
+  <div id="placeholder">Camera not started</div>
+</div>
+
+<div id="tags"></div>
+
+<script>
+  const video       = document.getElementById('video');
+  const canvas      = document.getElementById('canvas');
+  const ctx         = canvas.getContext('2d');
+  const startBtn    = document.getElementById('startBtn');
+  const stopBtn     = document.getElementById('stopBtn');
+  const statusEl    = document.getElementById('status');
+  const tagsEl      = document.getElementById('tags');
+  const placeholder = document.getElementById('placeholder');
+
+  let model = null, stream = null, running = false, rafId = null;
+
+  const COLORS = ['#00cfff','#ff5c5c','#00e89d','#ffc850','#c87eff','#ff8a4c','#5ce6ff','#ff6fa8'];
+  function getColor(cls) {
+    let h = 0;
+    for (const c of cls) h = (h * 31 + c.charCodeAt(0)) % COLORS.length;
+    return COLORS[h];
+  }
+
+  // Load model
+  cocoSsd.load().then(m => {
+    model = m;
+    statusEl.textContent = 'Model ready — click Start Camera';
+    startBtn.disabled = false;
+  }).catch(e => {
+    statusEl.textContent = 'Model load failed: ' + e.message;
+  });
+
+  // Start camera
+  startBtn.addEventListener('click', async () => {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+        audio: false
+      });
+      video.srcObject = stream;
+
+      video.onloadedmetadata = () => {
+        canvas.width  = video.videoWidth;
+        canvas.height = video.videoHeight;
+        video.play();
+        placeholder.style.display = 'none';
+        startBtn.disabled = true;
+        stopBtn.disabled  = false;
+        running = true;
+        statusEl.textContent = 'Detecting…';
+        detectLoop();
+      };
+    } catch (e) {
+      statusEl.textContent = 'Camera error: ' + e.message;
+    }
+  });
+
+  // Stop
+  stopBtn.addEventListener('click', () => {
+    running = false;
+    cancelAnimationFrame(rafId);
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    tagsEl.innerHTML = '';
+    placeholder.style.display = 'flex';
+    placeholder.textContent = 'Stopped';
+    startBtn.disabled = false;
+    stopBtn.disabled  = true;
+    statusEl.textContent = 'Stopped';
+  });
+
+  // Detection loop
+  let frameCount = 0, lastFpsTime = performance.now(), fps = 0;
+
+  async function detectLoop() {
+    if (!running) return;
+
+    if (video.readyState === 4) {
+
+      // Draw mirrored video frame onto an offscreen canvas for detection
+      // This way COCO-SSD sees the ORIGINAL (unmirrored) frame for correct bbox coords
+      const offscreen = document.createElement('canvas');
+      offscreen.width  = video.videoWidth;
+      offscreen.height = video.videoHeight;
+      const offCtx = offscreen.getContext('2d');
+
+      // Flip horizontally so model sees natural (unmirrored) image
+      offCtx.translate(video.videoWidth, 0);
+      offCtx.scale(-1, 1);
+      offCtx.drawImage(video, 0, 0);
+
+      const preds = await model.detect(offscreen);
+      const hits  = preds.filter(p => p.score >= 0.5);
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Canvas is NOT mirrored, but video IS mirrored via CSS.
+      // So we flip box X coords to match what the user sees on screen.
+      hits.forEach(({ bbox, class: cls, score }) => {
+        let [x, y, w, h] = bbox;
+        // Mirror the X coordinate to match CSS-mirrored video
+        x = canvas.width - x - w;
+
+        const col   = getColor(cls);
+        const label = `${cls}  ${Math.round(score * 100)}%`;
+
+        // Bounding box
+        ctx.strokeStyle = col;
+        ctx.lineWidth   = 2.5;
+        ctx.strokeRect(x, y, w, h);
+
+        // Label background
+        ctx.font = 'bold 13px monospace';
+        const tw = ctx.measureText(label).width + 14;
+        const lx = x;
+        const ly = y > 28 ? y - 26 : y + 4;
+        ctx.fillStyle = col;
+        ctx.fillRect(lx, ly, tw, 22);
+
+        // Label text — draws correctly because canvas has no transform
+        ctx.fillStyle = '#000';
+        ctx.fillText(label, lx + 7, ly + 15);
+      });
+
+      // Tags
+      tagsEl.innerHTML = hits.map(({ class: cls, score }) =>
+        `<span class="tag" style="border-color:${getColor(cls)};color:${getColor(cls)}">
+          ${cls} ${Math.round(score * 100)}%
+        </span>`
+      ).join('');
+
+      // FPS
+      frameCount++;
+      const now = performance.now();
+      if (now - lastFpsTime >= 1000) {
+        fps = frameCount; frameCount = 0; lastFpsTime = now;
+      }
+      statusEl.textContent = `${fps} FPS  ·  ${hits.length} object${hits.length !== 1 ? 's' : ''} detected`;
+    }
+
+    rafId = requestAnimationFrame(detectLoop);
+  }
+</script>
+</body>
+</html>

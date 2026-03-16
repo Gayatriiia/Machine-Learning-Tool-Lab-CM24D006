@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MobileNet Classifier</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 20px; }
+    video { border: 2px solid #333; border-radius: 8px; }
+    #results { margin-top: 16px; font-size: 18px; }
+    button { margin: 8px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <h2>📷 MobileNet Object Classifier</h2>
+  <video id="video" width="400" height="300" autoplay muted></video>
+  <br>
+  <button onclick="startCamera()">Start Camera</button>
+  <button onclick="stopCamera()">Stop</button>
+  <div id="results">Loading model...</div>
+
+  <script>
+    let model, stream, running = false;
+
+    // Load model on page load
+    mobilenet.load().then(m => {
+      model = m;
+      document.getElementById('results').textContent = 'Model ready. Click Start Camera.';
+    });
+
+    async function startCamera() {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const video = document.getElementById('video');
+      video.srcObject = stream;
+      running = true;
+      classify(video);
+    }
+
+    function stopCamera() {
+      running = false;
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      document.getElementById('results').textContent = 'Stopped.';
+    }
+
+    async function classify(video) {
+      if (!running) return;
+      const preds = await model.classify(video);
+      document.getElementById('results').innerHTML =
+        preds.map(p => `<b>${p.className.split(',')[0]}</b>: ${(p.probability * 100).toFixed(1)}%`).join('<br>');
+      requestAnimationFrame(() => classify(video));
+    }
+  </script>
+
+</body>
+</html>

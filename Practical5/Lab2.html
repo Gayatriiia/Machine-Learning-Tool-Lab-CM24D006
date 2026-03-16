@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MobileNet Classifier</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 20px; background: #111; color: #fff; }
+    .container { position: relative; display: inline-block; }
+    video  { display: block; width: 480px; height: 360px; }
+    canvas { position: absolute; top: 0; left: 0; width: 480px; height: 360px; }
+    button { margin: 10px 6px; padding: 10px 24px; font-size: 15px; cursor: pointer; }
+    #status { margin-top: 10px; font-size: 15px; color: #aaa; }
+  </style>
+</head>
+<body>
+
+  <h2>📷 MobileNet — Live Label Overlay</h2>
+
+  <div class="container">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <br>
+  <button onclick="startCamera()">▶ Start</button>
+  <button onclick="stopCamera()">■ Stop</button>
+  <div id="status">Loading model…</div>
+
+  <script>
+    const video  = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx    = canvas.getContext('2d');
+    const status = document.getElementById('status');
+
+    let model, stream, running = false;
+
+    // Load MobileNet
+    mobilenet.load().then(m => {
+      model = m;
+      status.textContent = 'Model ready. Click Start.';
+    });
+
+    async function startCamera() {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+      canvas.width  = 480;
+      canvas.height = 360;
+      running = true;
+      classify();
+    }
+
+    function stopCamera() {
+      running = false;
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      status.textContent = 'Stopped.';
+    }
+
+    async function classify() {
+      if (!running) return;
+
+      const preds = await model.classify(video, 3);
+
+      // Clear previous overlay
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw each label as a pill on the video
+      preds.forEach((p, i) => {
+        const label = `${p.className.split(',')[0]}  ${(p.probability * 100).toFixed(1)}%`;
+        const x = 12;
+        const y = 20 + i * 44;
+
+        // Background pill
+        ctx.font = 'bold 15px sans-serif';
+        const w = ctx.measureText(label).width + 20;
+        ctx.fillStyle = i === 0 ? 'rgba(0,200,100,0.82)' : 'rgba(0,0,0,0.62)';
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, 30, 6);
+        ctx.fill();
+
+        // Label text
+        ctx.fillStyle = '#fff';
+        ctx.fillText(label, x + 10, y + 20);
+      });
+
+      status.textContent = `Top: ${preds[0].className.split(',')[0]}`;
+      requestAnimationFrame(classify);
+    }
+  </script>
+
+</body>
+</html>
