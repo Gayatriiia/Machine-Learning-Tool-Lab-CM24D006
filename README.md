@@ -20,6 +20,12 @@ Click on the links below to navigate through the lab submissions:
 | **📁 Hello Tensor Flow** | Introductory concepts and environment setup for TFJS. | [Explore Setup](./Hello%20Tensor%20FLow) |
 | **📁 Practical 1** | Implementation of Linear Regression and basic model building. | [Explore Practical 1](./Practical%201) |
 | **📁 Practical 2** | **Digit Recognition (MNIST)**: Training a CNN to recognize hand-drawn digits. | [Explore Practical 2](./Practical%202) |
+| **📁 Practical 3** | Text Sentiment Analysis Classifr text as positive or negative using arr RNN or pre-trained sentiment modeL | [Explore Practical 3](./Practical%202) |
+| **📁 Practical 4** | Image classification with Pre-trained Model (MobileNet) Load MobileNet and classiff images directly in the browser. | [Explore Practical 4](./Practical%202) |
+| **📁 Practical  5** | Webcam-based Object Deiebtion Connect webcarrl capture frames, and classify objects in real time. | [Explore Practical 5](./Practical%201) |
+
+
+
 
 
 ---
