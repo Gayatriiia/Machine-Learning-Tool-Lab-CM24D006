@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Squat Rep Counter</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/posenet@2.2.2/dist/posenet.min.js"></script>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      background: #0a0a0f;
+      font-family: 'Courier New', monospace;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+      min-height: 100vh;
+    }
+
+    h2 {
+      font-size: 1.1rem;
+      letter-spacing: 3px;
+      color: #c8ff00;
+      margin-bottom: 14px;
+      text-transform: uppercase;
+    }
+
+    /* Layout */
+    .layout {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    /* Canvas */
+    #container {
+      position: relative;
+      width: 540px;
+      height: 405px;
+      border: 2px solid #c8ff0033;
+      border-radius: 6px;
+      overflow: hidden;
+      background: #000;
+      flex-shrink: 0;
+    }
+    video  { position:absolute; width:100%; height:100%; opacity:0; transform:scaleX(-1); }
+    canvas { position:absolute; width:100%; height:100%; transform:scaleX(-1); }
+
+    /* Side panel */
+    .panel {
+      width: 180px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card {
+      background: #13131a;
+      border: 1px solid #c8ff0022;
+      border-radius: 6px;
+      padding: 14px 12px;
+      text-align: center;
+    }
+
+    .card-label {
+      font-size: 0.65rem;
+      letter-spacing: 2px;
+      color: #666;
+      margin-bottom: 6px;
+    }
+
+    .card-value {
+      font-size: 2.8rem;
+      font-weight: bold;
+      line-height: 1;
+      color: #c8ff00;
+      text-shadow: 0 0 16px #c8ff0066;
+    }
+
+    .card-value.angle-val {
+      font-size: 1.6rem;
+      color: #00e5ff;
+      text-shadow: 0 0 10px #00e5ff66;
+    }
+
+    /* Phase badge */
+    #phase-badge {
+      background: #13131a;
+      border: 1px solid #c8ff0022;
+      border-radius: 6px;
+      padding: 10px;
+      text-align: center;
+      font-size: 0.75rem;
+      letter-spacing: 2px;
+      color: #aaa;
+    }
+    #phase-text {
+      font-size: 1rem;
+      font-weight: bold;
+      margin-top: 4px;
+      letter-spacing: 1px;
+    }
+
+    /* Angle bar */
+    .bar-wrap {
+      background: #13131a;
+      border: 1px solid #c8ff0022;
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+    .bar-label {
+      font-size: 0.6rem;
+      letter-spacing: 2px;
+      color: #555;
+      margin-bottom: 6px;
+    }
+    .bar-track {
+      background: #1e1e2a;
+      border-radius: 4px;
+      height: 10px;
+      overflow: hidden;
+    }
+    #angle-bar {
+      height: 100%;
+      width: 50%;
+      border-radius: 4px;
+      background: linear-gradient(90deg, #c8ff00, #00e5ff);
+      transition: width 0.15s;
+    }
+
+    /* Reset button */
+    button {
+      background: none;
+      border: 1px solid #c8ff0044;
+      border-radius: 4px;
+      color: #c8ff00;
+      font-family: 'Courier New', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 2px;
+      padding: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #c8ff0011; }
+
+    /* Status */
+    #status {
+      margin-top: 12px;
+      font-size: 0.72rem;
+      color: #555;
+      letter-spacing: 1px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<h2>⬛ Squat Rep Counter</h2>
+
+<div class="layout">
+
+  <div id="container">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="canvas" width="540" height="405"></canvas>
+  </div>
+
+  <div class="panel">
+
+    <div class="card">
+      <div class="card-label">REPS</div>
+      <div class="card-value" id="rep-count">0</div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">KNEE ANGLE</div>
+      <div class="card-value angle-val" id="angle-display">—°</div>
+    </div>
+
+    <div id="phase-badge">
+      <div class="card-label">PHASE</div>
+      <div id="phase-text" style="color:#555">WAITING</div>
+    </div>
+
+    <div class="bar-wrap">
+      <div class="bar-label">DEPTH METER</div>
+      <div class="bar-track"><div id="angle-bar"></div></div>
+    </div>
+
+    <button onclick="resetCount()">↺ RESET</button>
+
+  </div>
+</div>
+
+<div id="status">Loading PoseNet model…</div>
+
+<script>
+  const video   = document.getElementById('video');
+  const canvas  = document.getElementById('canvas');
+  const ctx     = canvas.getContext('2d');
+  const statusEl= document.getElementById('status');
+  const repEl   = document.getElementById('rep-count');
+  const angleEl = document.getElementById('angle-display');
+  const phaseEl = document.getElementById('phase-text');
+  const barEl   = document.getElementById('angle-bar');
+
+  // Squat thresholds (knee angle degrees)
+  const SQUAT_DOWN  = 110;   // below → squatting
+  const SQUAT_UP    = 155;   // above → standing
+
+  let reps  = 0;
+  let phase = 'up';   // 'up' | 'down'
+
+  function resetCount() {
+    reps = 0;
+    repEl.textContent = '0';
+    phase = 'up';
+  }
+
+  // Calculate angle at joint B formed by A-B-C
+  function calcAngle(A, B, C) {
+    const BA = { x: A.x - B.x, y: A.y - B.y };
+    const BC = { x: C.x - B.x, y: C.y - B.y };
+    const dot = BA.x * BC.x + BA.y * BC.y;
+    const magBA = Math.hypot(BA.x, BA.y);
+    const magBC = Math.hypot(BC.x, BC.y);
+    return Math.acos(Math.min(Math.max(dot / (magBA * magBC), -1), 1)) * (180 / Math.PI);
+  }
+
+  // Skeleton connections to draw
+  const CONNECTIONS = [
+    ['leftShoulder','rightShoulder'],
+    ['leftShoulder','leftHip'],['rightShoulder','rightHip'],
+    ['leftHip','rightHip'],
+    ['leftHip','leftKnee'],['leftKnee','leftAnkle'],
+    ['rightHip','rightKnee'],['rightKnee','rightAnkle'],
+    ['leftShoulder','leftElbow'],['leftElbow','leftWrist'],
+    ['rightShoulder','rightElbow'],['rightElbow','rightWrist'],
+  ];
+
+  function drawSkeleton(kpMap) {
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(200,255,0,0.5)';
+    CONNECTIONS.forEach(([a,b]) => {
+      const ka = kpMap[a], kb = kpMap[b];
+      if (!ka || !kb || ka.score < 0.3 || kb.score < 0.3) return;
+      ctx.beginPath();
+      ctx.moveTo(ka.position.x, ka.position.y);
+      ctx.lineTo(kb.position.x, kb.position.y);
+      ctx.stroke();
+    });
+  }
+
+  function drawKeypoints(keypoints) {
+    keypoints.forEach(({ position, score, part }) => {
+      if (score < 0.3) return;
+      const isKnee = part.includes('Knee');
+      ctx.beginPath();
+      ctx.arc(position.x, position.y, isKnee ? 7 : 4, 0, 2 * Math.PI);
+      ctx.fillStyle   = isKnee ? '#c8ff00' : '#00e5ff';
+      ctx.shadowColor = ctx.fillStyle;
+      ctx.shadowBlur  = isKnee ? 14 : 6;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    });
+  }
+
+  function drawAngleArc(B, angleDeg, color) {
+    ctx.beginPath();
+    ctx.arc(B.x, B.y, 28, 0, 2 * Math.PI);
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+    ctx.font = 'bold 11px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText(Math.round(angleDeg) + '°', B.x, B.y - 32);
+  }
+
+  function updatePhase(angle) {
+    if (angle < SQUAT_DOWN && phase === 'up') {
+      phase = 'down';
+      phaseEl.textContent = '▼ SQUAT';
+      phaseEl.style.color = '#ff4081';
+    } else if (angle > SQUAT_UP && phase === 'down') {
+      phase = 'up';
+      reps++;
+      repEl.textContent = reps;
+      phaseEl.textContent = '▲ STAND';
+      phaseEl.style.color = '#c8ff00';
+    }
+  }
+
+  function updateBar(angle) {
+    // 180° = standing (bar full), 60° = deep squat (bar empty)
+    const pct = Math.min(Math.max((angle - 60) / (180 - 60) * 100, 0), 100);
+    barEl.style.width = pct + '%';
+  }
+
+  async function setup() {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    video.srcObject = stream;
+    await new Promise(r => video.onloadedmetadata = r);
+    video.play();
+
+    const net = await posenet.load({
+      architecture: 'MobileNetV1',
+      outputStride: 16,
+      multiplier: 0.75
+    });
+
+    statusEl.textContent = '● Running — stand sideways for best accuracy';
+    statusEl.style.color = '#c8ff00';
+
+    detect(net);
+  }
+
+  function detect(net) {
+    net.estimateSinglePose(video, { flipHorizontal: false }).then(pose => {
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const kpMap = {};
+      pose.keypoints.forEach(k => kpMap[k.part] = k);
+
+      drawSkeleton(kpMap);
+      drawKeypoints(pose.keypoints);
+
+      // Use the better-confidence side (left or right knee)
+      const sides = ['left','right'];
+      let bestAngle = null, bestKnee = null;
+
+      sides.forEach(side => {
+        const hip   = kpMap[side + 'Hip'];
+        const knee  = kpMap[side + 'Knee'];
+        const ankle = kpMap[side + 'Ankle'];
+        if (!hip || !knee || !ankle) return;
+        if (hip.score < 0.3 || knee.score < 0.3 || ankle.score < 0.3) return;
+
+        const angle = calcAngle(hip.position, knee.position, ankle.position);
+        const conf  = (hip.score + knee.score + ankle.score) / 3;
+
+        if (bestAngle === null || conf > (bestConf || 0)) {
+          bestAngle = angle;
+          bestKnee  = knee.position;
+          bestConf  = conf;
+        }
+      });
+
+      var bestConf = bestConf || 0;
+
+      if (bestAngle !== null) {
+        const color = bestAngle < SQUAT_DOWN ? '#ff4081' : '#c8ff00';
+        drawAngleArc(bestKnee, bestAngle, color);
+        angleEl.textContent = Math.round(bestAngle) + '°';
+        updatePhase(bestAngle);
+        updateBar(bestAngle);
+      }
+
+      requestAnimationFrame(() => detect(net));
+    });
+  }
+
+  setup().catch(err => {
+    statusEl.textContent = 'Error: ' + err.message;
+    statusEl.style.color = '#ff4081';
+  });
+</script>
+</body>
+</html>

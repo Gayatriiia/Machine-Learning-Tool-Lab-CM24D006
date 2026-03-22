@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Pose Skeleton Detection</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/posenet@2.2.2/dist/posenet.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0d0d0d;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+      font-family: monospace;
+      padding: 20px;
+      color: #eee;
+    }
+    h2 {
+      margin-bottom: 12px;
+      font-size: 1.2rem;
+      letter-spacing: 2px;
+      color: #00e5ff;
+    }
+    #container {
+      position: relative;
+      width: 640px;
+      height: 480px;
+      border: 2px solid #00e5ff33;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #000;
+    }
+    video {
+      position: absolute;
+      width: 640px;
+      height: 480px;
+      transform: scaleX(-1);
+      opacity: 0;
+    }
+    canvas {
+      position: absolute;
+      width: 640px;
+      height: 480px;
+      transform: scaleX(-1);
+    }
+    #status {
+      margin-top: 12px;
+      font-size: 0.8rem;
+      color: #aaa;
+      letter-spacing: 1px;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>◈ POSE SKELETON DETECTOR</h2>
+
+  <div id="container">
+    <video id="video" autoplay muted playsinline></video>
+    <canvas id="canvas" width="640" height="480"></canvas>
+  </div>
+
+  <div id="status">Loading model...</div>
+
+  <script>
+    const video  = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx    = canvas.getContext('2d');
+    const status = document.getElementById('status');
+
+    // Skeleton connections
+    const CONNECTIONS = [
+      ['nose','leftEye'],['nose','rightEye'],
+      ['leftEye','leftEar'],['rightEye','rightEar'],
+      ['leftShoulder','rightShoulder'],
+      ['leftShoulder','leftElbow'],['leftElbow','leftWrist'],
+      ['rightShoulder','rightElbow'],['rightElbow','rightWrist'],
+      ['leftShoulder','leftHip'],['rightShoulder','rightHip'],
+      ['leftHip','rightHip'],
+      ['leftHip','leftKnee'],['leftKnee','leftAnkle'],
+      ['rightHip','rightKnee'],['rightKnee','rightAnkle']
+    ];
+
+    async function setup() {
+      // Start webcam
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      video.srcObject = stream;
+      await new Promise(r => video.onloadedmetadata = r);
+      video.play();
+
+      // Load PoseNet
+      const net = await posenet.load({
+        architecture: 'MobileNetV1',
+        outputStride: 16,
+        multiplier: 0.75
+      });
+
+      status.textContent = '● Detecting — stand back so your full body is visible';
+      status.style.color = '#00e5ff';
+
+      detect(net);
+    }
+
+    function getKeypoint(keypoints, name) {
+      return keypoints.find(k => k.part === name);
+    }
+
+    function detect(net) {
+      net.estimateSinglePose(video, { flipHorizontal: false }).then(pose => {
+
+        // Draw video frame
+        ctx.drawImage(video, 0, 0, 640, 480);
+
+        const kps = pose.keypoints;
+        const kpMap = {};
+        kps.forEach(k => kpMap[k.part] = k);
+
+        // Draw skeleton lines
+        ctx.lineWidth = 2.5;
+        CONNECTIONS.forEach(([a, b]) => {
+          const ka = kpMap[a], kb = kpMap[b];
+          if (!ka || !kb || ka.score < 0.3 || kb.score < 0.3) return;
+          ctx.beginPath();
+          ctx.moveTo(ka.position.x, ka.position.y);
+          ctx.lineTo(kb.position.x, kb.position.y);
+          ctx.strokeStyle = 'rgba(0, 229, 255, 0.7)';
+          ctx.stroke();
+        });
+
+        // Draw keypoints
+        kps.forEach(({ position, score }) => {
+          if (score < 0.3) return;
+          ctx.beginPath();
+          ctx.arc(position.x, position.y, 5, 0, 2 * Math.PI);
+          ctx.fillStyle   = score > 0.6 ? '#00e5ff' : '#ff4081';
+          ctx.shadowColor = ctx.fillStyle;
+          ctx.shadowBlur  = 8;
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        });
+
+        requestAnimationFrame(() => detect(net));
+      });
+    }
+
+    setup().catch(err => {
+      status.textContent = 'Error: ' + err.message;
+      status.style.color = '#ff4081';
+    });
+  </script>
+
+</body>
+</html>
