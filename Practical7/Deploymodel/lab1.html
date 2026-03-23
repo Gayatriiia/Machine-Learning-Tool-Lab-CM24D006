@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Train & Save Model</title>
+  <!-- TensorFlow.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+</head>
+<body>
+
+<h2>Train and Save Model (LocalStorage)</h2>
+<button onclick="trainAndSave()">Train & Save Model</button>
+
+<p id="status"></p>
+
+<script>
+async function trainAndSave() {
+
+  // Step 1: Create model
+  const model = tf.sequential();
+  model.add(tf.layers.dense({units: 1, inputShape: [1]}));
+
+  // Step 2: Compile model
+  model.compile({
+    optimizer: 'sgd',
+    loss: 'meanSquaredError'
+  });
+
+  // Step 3: Training data (y = 2x)
+  const xs = tf.tensor2d([1, 2, 3, 4], [4, 1]);
+  const ys = tf.tensor2d([2, 4, 6, 8], [4, 1]);
+
+  // Step 4: Train model
+  document.getElementById("status").innerText = "Training...";
+  await model.fit(xs, ys, {epochs: 150});
+
+  // Step 5: Save model to LocalStorage
+  await model.save('localstorage://simple-model');
+
+  document.getElementById("status").innerText =
+    "Model trained and saved to LocalStorage!";
+}
+</script>
+
+</body>
+</html>

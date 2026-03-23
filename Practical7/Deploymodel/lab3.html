@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Model Export & Import</title>
+  <!-- TensorFlow.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+</head>
+<body>
+
+<h3>Model Export & Import (Simple)</h3>
+
+<button onclick="train()">1. Train & Download</button><br><br>
+
+<input type="file" id="files" multiple><br><br>
+
+<button onclick="load()">2. Load Model</button>
+<button onclick="predict()">3. Predict (x=5)</button>
+
+<p id="out"></p>
+
+<script>
+let model;
+
+// Train and download
+async function train() {
+  model = tf.sequential();
+  model.add(tf.layers.dense({units:1, inputShape:[1]}));
+
+  model.compile({optimizer:'sgd', loss:'meanSquaredError'});
+
+  const xs = tf.tensor2d([1,2,3,4],[4,1]);
+  const ys = tf.tensor2d([2,4,6,8],[4,1]);
+
+  document.getElementById("out").innerText = "Training...";
+  await model.fit(xs, ys, {epochs:100});
+
+  await model.save('downloads://model');
+
+  document.getElementById("out").innerText = "Downloaded model files!";
+}
+
+// Load from files
+async function load() {
+  const files = document.getElementById("files").files;
+
+  if (files.length < 2) {
+    alert("Upload both files!");
+    return;
+  }
+
+  model = await tf.loadLayersModel(tf.io.browserFiles(files));
+
+  document.getElementById("out").innerText = "Model Loaded!";
+}
+
+// Predict
+async function predict() {
+  if (!model) {
+    alert("Load model first!");
+    return;
+  }
+
+  const res = model.predict(tf.tensor2d([5],[1,1]));
+  const val = await res.data();
+
+  document.getElementById("out").innerText =
+    "Prediction: " + val[0] + " (Expected ~10)";
+}
+</script>
+
+</body>
+</html>
