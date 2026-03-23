@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Load & Verify Model</title>
+  <!-- TensorFlow.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+</head>
+<body>
+
+<h2>Load Model & Verify Prediction</h2>
+<button onclick="loadModel()">Load Model</button>
+<button onclick="predict()">Predict (x = 5)</button>
+
+<p id="result"></p>
+
+<script>
+let model;
+
+// Step 1: Load saved model
+async function loadModel() {
+  model = await tf.loadLayersModel('localstorage://simple-model');
+  document.getElementById("result").innerText = "Model loaded!";
+}
+
+// Step 2: Predict and verify
+async function predict() {
+  if (!model) {
+    alert("Load model first!");
+    return;
+  }
+
+  const input = tf.tensor2d([5], [1, 1]);
+  const output = model.predict(input);
+
+  const value = await output.data();
+
+  document.getElementById("result").innerText =
+    "Prediction for x=5: " + value[0] +
+    " (Expected ≈ 10)";
+}
+</script>
+
+</body>
+</html>
