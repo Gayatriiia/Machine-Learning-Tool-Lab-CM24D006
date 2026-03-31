@@ -23,6 +23,15 @@ Click on the links below to navigate through the lab submissions:
 | **📁 Practical 3** | Text Sentiment Analysis Classifr text as positive or negative using arr RNN or pre-trained sentiment modeL | [Explore Practical 3](./Practical%202) |
 | **📁 Practical 4** | Image classification with Pre-trained Model (MobileNet) Load MobileNet and classiff images directly in the browser. | [Explore Practical 4](./Practical%202) |
 | **📁 Practical  5** | Webcam-based Object Deiebtion Connect webcarrl capture frames, and classify objects in real time. | [Explore Practical 5](./Practical%201) |
+| **📁 Practical  6** | Pose Detection with Pre-trained Model Posenet | [Explore Practical 6](./Practical%201) |
+| **📁 Practical  7** | Deploying a Model in Browser | [Explore Practical 7](./Practical%201) |
+| **📁 Practical  8** | Transfer Learning with ImagesRetrain MobileNet for custom categories (e.g., fruits). | [Explore Practical 8](./Practical%201) |
+| PoseLab | To design and develop a client-side emotion detection system using TensorFlow.js that predicts human emotions from images or webcam input directly in the browser.  | [Explore Post Lab](./Practical%201) |
+
+
+
+
+
 
 
 
