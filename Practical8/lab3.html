@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Incremental MobileNet Classifier</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.4/dist/knn-classifier.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background: #f9f9f9; }
+    video { border: 2px solid #ccc; border-radius: 8px; display: block; margin: 10px auto; }
+    button { margin: 4px; padding: 8px 16px; font-size: 14px; cursor: pointer; border-radius: 6px; border: 1px solid #aaa; background:#fff; }
+    button:hover { background: #eee; }
+    button:disabled { opacity:.4; cursor:not-allowed; }
+    .box { background:#fff; border-radius:10px; padding:14px; margin:10px auto; max-width:600px; box-shadow:0 1px 4px rgba(0,0,0,.1); }
+    table { border-collapse:collapse; margin:8px auto; }
+    th,td { border:1px solid #ccc; padding:8px 14px; font-size:14px; }
+    th { background:#f0f0f0; }
+    .hit  { background:#c8f7c5; font-weight:bold; }
+    .miss { background:#f7c5c5; }
+    /* history chart */
+    .bar-row { display:flex; align-items:center; gap:8px; margin:4px 0; font-size:13px; }
+    .bar { height:20px; background:#4caf50; border-radius:4px; transition:width .4s; min-width:2px; }
+    .cat-tag { display:inline-block; background:#e0e0e0; border-radius:12px; padding:2px 10px; margin:3px; font-size:13px; }
+  </style>
+</head>
+<body>
+
+<h2>🔄 Incremental MobileNet Classifier</h2>
+<p id="status">Loading model…</p>
+
+<video id="cam" width="300" height="220" autoplay playsinline muted></video>
+
+<!-- Active categories -->
+<div class="box">
+  <b>Active Categories</b>
+  <div id="cat-list" style="margin-top:8px">None yet</div>
+</div>
+
+<!-- Add new category -->
+<div class="box">
+  <b>➕ Add New Category</b><br/><br/>
+  <input id="new-name" placeholder="e.g. Grape 🍇" style="padding:7px;font-size:14px;border-radius:6px;border:1px solid #ccc;width:160px"/>
+  <button onclick="addCategory()" id="addCatBtn" disabled>Add Category</button>
+</div>
+
+<!-- Collect samples -->
+<div class="box">
+  <b>📸 Collect Samples</b>
+  <div id="sample-btns" style="margin-top:10px"><i style="color:#aaa">Add a category first</i></div>
+</div>
+
+<!-- Evaluate -->
+<div class="box">
+  <b>🧪 Validate & Evaluate</b>
+  <div id="val-btns" style="margin-top:10px"><i style="color:#aaa">Add a category first</i></div>
+  <br/>
+  <button onclick="evaluate()" id="evalBtn" disabled>📊 Evaluate</button>
+</div>
+
+<!-- Results -->
+<div class="box" id="results" style="display:none">
+  <b>Confusion Matrix</b>
+  <p style="font-size:12px;color:#888">Row = Actual &nbsp;|&nbsp; Col = Predicted</p>
+  <div id="cm-out"></div>
+  <br/>
+  <b>Accuracy History (after each Evaluate)</b>
+  <div id="history" style="margin-top:10px;text-align:left;padding:0 20px"></div>
+</div>
+
+<script>
+  let net, knn;
+  const categories = [];   // {name, trainCnt, valCnt}
+  const valSet     = [];   // {emb, label}
+  const accHistory = [];   // [{cats: [...names], acc}]
+
+  // Camera
+  navigator.mediaDevices.getUserMedia({video:true})
+    .then(s => document.getElementById('cam').srcObject = s)
+    .catch(() => document.getElementById('status').textContent = 'Camera unavailable');
+
+  // Load models
+  (async () => {
+    knn = knnClassifier.create();
+    net = await mobilenet.load();
+    document.getElementById('status').textContent = 'Ready! Add categories and collect samples.';
+    document.getElementById('addCatBtn').disabled = false;
+  })();
+
+  // ── Add new category ────────────────────────────────────────────────────
+  function addCategory() {
+    const name = document.getElementById('new-name').value.trim();
+    if (!name) return alert('Enter a category name.');
+    if (categories.find(c => c.name === name)) return alert('Category already exists.');
+
+    categories.push({ name, trainCnt: 0, valCnt: 0 });
+    document.getElementById('new-name').value = '';
+
+    updateCatList();
+    updateSampleBtns();
+    updateValBtns();
+    document.getElementById('status').textContent = `Added category: ${name}`;
+  }
+
+  // ── Snap sample ─────────────────────────────────────────────────────────
+  function snap(split, idx) {
+    const emb = tf.tidy(() => net.infer(document.getElementById('cam'), true));
+    if (split === 'train') {
+      knn.addExample(emb, idx);
+      emb.dispose();
+      categories[idx].trainCnt++;
+    } else {
+      valSet.push({ emb, label: idx });
+      categories[idx].valCnt++;
+    }
+    updateCatList();
+    checkEvalReady();
+    document.getElementById('status').textContent =
+      `[${split}] Sample added for: ${categories[idx].name}`;
+  }
+
+  // ── Evaluate ─────────────────────────────────────────────────────────────
+  async function evaluate() {
+    if (valSet.length === 0) return alert('No validation samples yet!');
+    document.getElementById('status').textContent = 'Evaluating…';
+
+    const n  = categories.length;
+    const cm = Array.from({length: n}, () => Array(n).fill(0));
+    let correct = 0;
+
+    for (const {emb, label} of valSet) {
+      if (label >= n) continue;  // skip if category was removed
+      const res  = await knn.predictClass(emb, 3);
+      const pred = parseInt(res.label);
+      cm[label][pred]++;
+      if (pred === label) correct++;
+    }
+
+    const total = valSet.filter(v => v.label < n).length;
+    const acc   = total > 0 ? (correct / total * 100).toFixed(1) : '0.0';
+
+    // Save history
+    accHistory.push({ cats: categories.map(c => c.name), acc: parseFloat(acc) });
+
+    // Confusion matrix HTML
+    let html = `<b>Accuracy: ${acc}% &nbsp;(${correct}/${total})</b><br/><br/><table>
+      <tr><th>Actual ↓ / Pred →</th>${categories.map(c=>`<th>${c.name}</th>`).join('')}</tr>`;
+    cm.forEach((row, i) => {
+      html += `<tr><th>${categories[i].name}</th>` +
+        row.map((v, j) => `<td class="${i===j?'hit':v>0?'miss':''}">${v}</td>`).join('') +
+        `</tr>`;
+    });
+    html += `</table>`;
+    document.getElementById('cm-out').innerHTML = html;
+
+    // History chart
+    let histHTML = '';
+    accHistory.forEach((h, i) => {
+      const barW = Math.round(h.acc * 3);
+      const color = h.acc >= 80 ? '#4caf50' : h.acc >= 50 ? '#ff9800' : '#f44336';
+      histHTML += `
+        <div class="bar-row">
+          <span style="min-width:30px;color:#888">#${i+1}</span>
+          <div class="bar" style="width:${barW}px;background:${color}"></div>
+          <span><b>${h.acc}%</b> &nbsp;
+            ${h.cats.map(c=>`<span class="cat-tag">${c}</span>`).join('')}
+          </span>
+        </div>`;
+    });
+    document.getElementById('history').innerHTML = histHTML;
+
+    // Performance change note
+    if (accHistory.length >= 2) {
+      const prev = accHistory[accHistory.length - 2].acc;
+      const curr = parseFloat(acc);
+      const diff = (curr - prev).toFixed(1);
+      const sign = diff >= 0 ? `▲ +${diff}%` : `▼ ${diff}%`;
+      const col  = diff >= 0 ? 'green' : 'red';
+      document.getElementById('status').textContent =
+        `Accuracy: ${acc}%  |  Change from last run: ${sign}`;
+      document.getElementById('status').style.color = col;
+    } else {
+      document.getElementById('status').textContent = `Accuracy: ${acc}%`;
+      document.getElementById('status').style.color = '#333';
+    }
+
+    document.getElementById('results').style.display = 'block';
+  }
+
+  // ── UI helpers ────────────────────────────────────────────────────────────
+  function updateCatList() {
+    document.getElementById('cat-list').innerHTML = categories.length === 0
+      ? 'None yet'
+      : categories.map((c, i) =>
+          `<span class="cat-tag">${c.name} &nbsp;<small>T:${c.trainCnt} V:${c.valCnt}</small></span>`
+        ).join('');
+  }
+
+  function updateSampleBtns() {
+    document.getElementById('sample-btns').innerHTML = categories
+      .map((c, i) => `<button onclick="snap('train',${i})">📷 ${c.name}</button>`)
+      .join('');
+  }
+
+  function updateValBtns() {
+    document.getElementById('val-btns').innerHTML = categories
+      .map((c, i) => `<button onclick="snap('val',${i})">🧪 ${c.name}</button>`)
+      .join('');
+  }
+
+  function checkEvalReady() {
+    const hasTrain = categories.some(c => c.trainCnt > 0);
+    const hasVal   = categories.some(c => c.valCnt > 0);
+    document.getElementById('evalBtn').disabled = !(hasTrain && hasVal);
+  }
+</script>
+</body>
+</html>

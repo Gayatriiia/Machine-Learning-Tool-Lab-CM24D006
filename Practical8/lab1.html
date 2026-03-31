@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>MobileNet Fruit Classifier</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.4/dist/knn-classifier.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+    button { margin: 5px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    #result { font-size: 24px; font-weight: bold; margin-top: 20px; }
+    video { border: 2px solid #ccc; border-radius: 8px; }
+  </style>
+</head>
+<body>
+
+  <h2>🍎 MobileNet Fruit Classifier</h2>
+  <p id="status">Loading model...</p>
+
+  <video id="webcam" width="320" height="240" autoplay playsinline muted></video>
+
+  <br/>
+  <button onclick="addSample(0)">Add 🍎 Apple</button>
+  <button onclick="addSample(1)">Add 🍌 Banana</button>
+  <button onclick="addSample(2)">Add 🥭 Mango</button>
+  <br/>
+  <button onclick="predict()" id="predictBtn" disabled>▶ Predict</button>
+
+  <div id="result"></div>
+
+<script>
+  const CLASSES = ['🍎 Apple', '🍌 Banana', '🥭 Mango'];
+  let net, knn, predicting = false;
+
+  // Init camera
+  navigator.mediaDevices.getUserMedia({ video: true })
+    .then(stream => { document.getElementById('webcam').srcObject = stream; });
+
+  // Load MobileNet + KNN
+  (async () => {
+    knn = knnClassifier.create();
+    net = await mobilenet.load();
+    document.getElementById('status').textContent = 'Model ready! Add samples then predict.';
+  })();
+
+  // Add training sample
+  function addSample(classIndex) {
+    const video = document.getElementById('webcam');
+    const embedding = tf.tidy(() => net.infer(video, true));
+    knn.addExample(embedding, classIndex);
+    embedding.dispose();
+    document.getElementById('status').textContent =
+      `Added sample for ${CLASSES[classIndex]}`;
+    document.getElementById('predictBtn').disabled = false;
+  }
+
+  // Predict loop
+  async function predict() {
+    predicting = !predicting;
+    document.getElementById('predictBtn').textContent =
+      predicting ? '⏹ Stop' : '▶ Predict';
+
+    while (predicting) {
+      const video = document.getElementById('webcam');
+      const embedding = tf.tidy(() => net.infer(video, true));
+      const result = await knn.predictClass(embedding, 3);
+      embedding.dispose();
+
+      const label = CLASSES[result.label];
+      const conf  = (result.confidences[result.label] * 100).toFixed(0);
+      document.getElementById('result').textContent = `${label} — ${conf}%`;
+
+      await tf.nextFrame();
+    }
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>MobileNet — Accuracy & Confusion Matrix</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.4/dist/knn-classifier.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; padding: 20px; background: #f5f5f5; }
+    h2   { margin-bottom: 4px; }
+    video { border: 2px solid #ccc; border-radius: 8px; margin: 10px 0; }
+    button { margin: 4px; padding: 9px 18px; font-size: 15px; cursor: pointer; border-radius: 6px; border: 1px solid #aaa; background: #fff; }
+    button:hover { background: #eee; }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    #status { color: #555; margin: 8px 0; font-size: 14px; }
+
+    /* ── section boxes ── */
+    .box { background: #fff; border-radius: 10px; padding: 16px; margin: 12px auto; max-width: 540px; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+
+    /* ── confusion matrix ── */
+    table { border-collapse: collapse; margin: 0 auto; }
+    th, td { border: 1px solid #ccc; padding: 10px 16px; font-size: 15px; }
+    th { background: #f0f0f0; }
+    td.diag { background: #d4edda; font-weight: bold; }   /* correct */
+    td.off  { background: #f8d7da; }                       /* wrong   */
+
+    /* ── metrics ── */
+    .metrics { display: flex; justify-content: center; gap: 30px; margin-top: 10px; }
+    .metric  { font-size: 20px; font-weight: bold; }
+    .metric span { display: block; font-size: 12px; font-weight: normal; color: #777; }
+  </style>
+</head>
+<body>
+
+<h2>🍎 MobileNet Fruit Classifier</h2>
+<p id="status">Loading model…</p>
+
+<video id="webcam" width="300" height="220" autoplay playsinline muted></video>
+
+<!-- TRAIN -->
+<div class="box">
+  <b>1. Collect Training Samples</b><br/><br/>
+  <button onclick="addSample('train',0)">Train 🍎 Apple</button>
+  <button onclick="addSample('train',1)">Train 🍌 Banana</button>
+  <button onclick="addSample('train',2)">Train 🥭 Mango</button>
+  <div id="train-counts" style="margin-top:8px;font-size:13px;color:#555">🍎 0 &nbsp; 🍌 0 &nbsp; 🥭 0</div>
+</div>
+
+<!-- VALIDATE -->
+<div class="box">
+  <b>2. Collect Validation Samples</b><br/><br/>
+  <button onclick="addSample('val',0)">Val 🍎 Apple</button>
+  <button onclick="addSample('val',1)">Val 🍌 Banana</button>
+  <button onclick="addSample('val',2)">Val 🥭 Mango</button>
+  <div id="val-counts" style="margin-top:8px;font-size:13px;color:#555">🍎 0 &nbsp; 🍌 0 &nbsp; 🥭 0</div>
+</div>
+
+<!-- EVALUATE -->
+<div class="box">
+  <b>3. Evaluate</b><br/><br/>
+  <button id="evalBtn" onclick="evaluate()" disabled>📊 Evaluate on Validation Set</button>
+</div>
+
+<!-- RESULTS -->
+<div class="box" id="results" style="display:none">
+  <b>Results</b>
+  <div class="metrics">
+    <div class="metric" id="acc-val">—<span>Accuracy</span></div>
+    <div class="metric" id="correct-val">—<span>Correct</span></div>
+    <div class="metric" id="total-val">—<span>Total</span></div>
+  </div>
+
+  <br/>
+  <b>Confusion Matrix</b>
+  <p style="font-size:12px;color:#888">Row = Actual &nbsp;|&nbsp; Col = Predicted</p>
+  <table id="cm-table"></table>
+</div>
+
+<script>
+  const CLASSES   = ['🍎 Apple', '🍌 Banana', '🥭 Mango'];
+  const trainCnts = [0, 0, 0];
+  const valCnts   = [0, 0, 0];
+  // valData[i] = array of {embedding, label} for class i
+  const valData   = [];
+
+  let net, knn;
+
+  // ── camera ──────────────────────────────────────────────────────────────
+  navigator.mediaDevices.getUserMedia({ video: true })
+    .then(s => document.getElementById('webcam').srcObject = s)
+    .catch(() => setStatus('Camera unavailable'));
+
+  // ── load models ──────────────────────────────────────────────────────────
+  (async () => {
+    knn = knnClassifier.create();
+    net = await mobilenet.load();
+    setStatus('Ready! Add training samples, then validation samples, then Evaluate.');
+  })();
+
+  function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+  // ── add sample (train or val) ────────────────────────────────────────────
+  function addSample(split, classIdx) {
+    const video = document.getElementById('webcam');
+    const emb   = tf.tidy(() => net.infer(video, true));
+
+    if (split === 'train') {
+      knn.addExample(emb, classIdx);
+      emb.dispose();
+      trainCnts[classIdx]++;
+      document.getElementById('train-counts').innerHTML =
+        `🍎 ${trainCnts[0]} &nbsp; 🍌 ${trainCnts[1]} &nbsp; 🥭 ${trainCnts[2]}`;
+    } else {
+      // Store embedding tensor (keep it alive for evaluation)
+      valData.push({ emb, label: classIdx });
+      valCnts[classIdx]++;
+      document.getElementById('val-counts').innerHTML =
+        `🍎 ${valCnts[0]} &nbsp; 🍌 ${valCnts[1]} &nbsp; 🥭 ${valCnts[2]}`;
+    }
+
+    // Enable evaluate when both sets have data
+    const hasTrain = trainCnts.some(c => c > 0);
+    const hasVal   = valCnts.some(c => c > 0);
+    document.getElementById('evalBtn').disabled = !(hasTrain && hasVal);
+
+    setStatus(`Added ${split} sample for ${CLASSES[classIdx]}`);
+  }
+
+  // ── evaluate ─────────────────────────────────────────────────────────────
+  async function evaluate() {
+    setStatus('Evaluating…');
+    document.getElementById('evalBtn').disabled = true;
+
+    const n = CLASSES.length;
+    // cm[actual][predicted]
+    const cm = Array.from({length: n}, () => Array(n).fill(0));
+    let correct = 0;
+
+    for (const {emb, label} of valData) {
+      const res  = await knn.predictClass(emb, 3);
+      const pred = parseInt(res.label);
+      cm[label][pred]++;
+      if (pred === label) correct++;
+    }
+
+    const total    = valData.length;
+    const accuracy = (correct / total * 100).toFixed(1);
+
+    // Show metrics
+    document.getElementById('acc-val').childNodes[0].textContent     = accuracy + '%';
+    document.getElementById('correct-val').childNodes[0].textContent = correct;
+    document.getElementById('total-val').childNodes[0].textContent   = total;
+
+    // Build confusion matrix table
+    const tbl = document.getElementById('cm-table');
+    tbl.innerHTML = '';
+
+    // Header row
+    let hdr = '<tr><th>Actual \\ Predicted</th>';
+    CLASSES.forEach(c => hdr += `<th>${c}</th>`);
+    hdr += '</tr>';
+    tbl.innerHTML = hdr;
+
+    // Data rows
+    cm.forEach((row, i) => {
+      let tr = `<tr><th>${CLASSES[i]}</th>`;
+      row.forEach((val, j) => {
+        const cls = i === j ? 'diag' : (val > 0 ? 'off' : '');
+        tr += `<td class="${cls}">${val}</td>`;
+      });
+      tr += '</tr>';
+      tbl.innerHTML += tr;
+    });
+
+    document.getElementById('results').style.display = 'block';
+    document.getElementById('evalBtn').disabled = false;
+    setStatus(`Done! Accuracy: ${accuracy}% on ${total} validation samples.`);
+  }
+</script>
+</body>
+</html>

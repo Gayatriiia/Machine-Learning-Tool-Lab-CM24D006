@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Transfer Learning — MobileNet Retrainer</title>
+
+  <!-- TensorFlow.js + MobileNet + KNN Classifier -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier@1.2.4/dist/knn-classifier.js"></script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet"/>
+
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #13131c;
+      --card: #1b1b28;
+      --border: #2a2a3d;
+      --accent: #b8ff57;
+      --accent2: #57d4ff;
+      --accent3: #ff7c57;
+      --text: #e8e8f0;
+      --muted: #6b6b85;
+      --radius: 12px;
+      --mono: 'Space Mono', monospace;
+      --sans: 'Syne', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      padding: 0 0 60px;
+    }
+
+    header {
+      padding: 36px 40px 28px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: flex-end;
+      gap: 20px;
+    }
+
+    .logo-mark {
+      width: 48px; height: 48px;
+      background: var(--accent);
+      border-radius: 10px;
+      display: grid; place-items: center;
+      flex-shrink: 0;
+    }
+
+    .logo-mark svg { width: 28px; height: 28px; }
+
+    header h1 {
+      font-size: 1.6rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+
+    header h1 span { color: var(--accent); }
+
+    header p {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .status-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 40px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+    }
+
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.3s;
+    }
+    .dot.loading { background: var(--accent2); animation: pulse 1s infinite; }
+    .dot.ready   { background: var(--accent); }
+    .dot.error   { background: var(--accent3); }
+
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    #status-text { color: var(--muted); }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 36px 40px 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media(max-width:700px) {
+      main { grid-template-columns: 1fr; padding: 20px 16px 0; }
+      header { padding: 20px 16px; }
+      .status-bar { padding: 10px 16px; }
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+
+    .panel-title {
+      font-size: 0.7rem;
+      font-family: var(--mono);
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .panel-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* CAMERA */
+    .cam-wrap {
+      position: relative;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #000;
+      aspect-ratio: 4/3;
+    }
+
+    #webcam {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .cam-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(10,10,15,0.7);
+      backdrop-filter: blur(4px);
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-align: center;
+      padding: 20px;
+      line-height: 1.7;
+    }
+
+    #start-cam-btn {
+      margin-top: 14px;
+      padding: 8px 20px;
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    #start-cam-btn:hover { opacity: 0.85; }
+
+    /* CLASSES */
+    .classes-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .class-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .class-color {
+      width: 10px; height: 10px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .class-name {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 10px;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .class-name:focus { border-color: var(--accent2); }
+
+    .add-samples-btn {
+      padding: 7px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+      white-space: nowrap;
+    }
+    .add-samples-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .add-samples-btn.capturing {
+      border-color: var(--accent3);
+      color: var(--accent3);
+      animation: pulse 0.6s infinite;
+    }
+
+    .sample-count {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--muted);
+      min-width: 28px;
+      text-align: right;
+    }
+
+    .remove-class {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 2px 4px;
+      transition: color 0.2s;
+    }
+    .remove-class:hover { color: var(--accent3); }
+
+    .add-class-btn {
+      width: 100%;
+      padding: 9px;
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    .add-class-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+    /* ACTIONS */
+    .actions {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      padding: 11px 24px;
+      border-radius: 8px;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #000;
+    }
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-secondary:hover:not(:disabled) { border-color: var(--accent2); color: var(--accent2); }
+    .btn-danger {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .btn-danger:hover { border-color: var(--accent3); color: var(--accent3); }
+
+    /* RESULTS */
+    .results-panel {
+      grid-column: 1 / -1;
+    }
+
+    .prediction-bar-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .pred-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .pred-label {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      min-width: 90px;
+      color: var(--text);
+    }
+
+    .pred-bar-bg {
+      flex: 1;
+      height: 10px;
+      background: var(--surface);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .pred-bar {
+      height: 100%;
+      border-radius: 99px;
+      transition: width 0.3s ease;
+    }
+
+    .pred-pct {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--muted);
+      min-width: 38px;
+      text-align: right;
+    }
+
+    .prediction-top {
+      font-size: 2.2rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+
+    .prediction-sub {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+
+    /* HOW IT WORKS */
+    .how-panel {
+      grid-column: 1 / -1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    @media(max-width:700px) { .steps { grid-template-columns: 1fr 1fr; } }
+
+    .step {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .step-num {
+      font-family: var(--mono);
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: var(--accent);
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .step h4 {
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .step p {
+      font-size: 0.72rem;
+      color: var(--muted);
+      line-height: 1.6;
+      font-family: var(--mono);
+    }
+
+    /* log */
+    #log {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-top: 14px;
+      max-height: 80px;
+      overflow-y: auto;
+      line-height: 1.8;
+    }
+
+    /* colors */
+    .colors { --c0:#b8ff57; --c1:#57d4ff; --c2:#ff7c57; --c3:#c457ff; --c4:#ffd557; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">
+    <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="3" y="3" width="10" height="10" rx="2" fill="#0a0a0f"/>
+      <rect x="15" y="3" width="10" height="10" rx="2" fill="#0a0a0f"/>
+      <rect x="3" y="15" width="10" height="10" rx="2" fill="#0a0a0f"/>
+      <rect x="15" y="15" width="10" height="10" rx="2" fill="#0a0a0f"/>
+    </svg>
+  </div>
+  <div>
+    <h1>Transfer<span>Learning</span></h1>
+    <p>MobileNet + KNN Classifier — runs entirely in-browser · no server needed</p>
+  </div>
+</header>
+
+<div class="status-bar">
+  <div class="dot loading" id="status-dot"></div>
+  <span id="status-text">Loading TensorFlow.js & MobileNet…</span>
+</div>
+
+<main>
+
+  <!-- LEFT: Camera -->
+  <div class="panel">
+    <div class="panel-title">Live Camera</div>
+    <div class="cam-wrap">
+      <video id="webcam" autoplay playsinline muted></video>
+      <div class="cam-overlay" id="cam-overlay">
+        <div>
+          Camera not active.<br>Start it when you're ready to collect samples.
+          <br><br>
+          <button id="start-cam-btn">Enable Camera</button>
+        </div>
+      </div>
+    </div>
+    <div id="log">› Initializing model…</div>
+  </div>
+
+  <!-- RIGHT: Classes -->
+  <div class="panel">
+    <div class="panel-title">Training Classes</div>
+    <div class="classes-list" id="classes-list"></div>
+    <button class="add-class-btn" id="add-class-btn">＋ Add Class</button>
+  </div>
+
+  <!-- ACTIONS -->
+  <div class="actions">
+    <button class="btn btn-primary" id="train-btn" disabled>▶ Start Predicting</button>
+    <button class="btn btn-secondary" id="stop-btn" disabled>■ Stop</button>
+    <button class="btn btn-danger" id="reset-btn">↺ Reset</button>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="panel results-panel" id="results-panel" style="display:none">
+    <div class="panel-title">Prediction</div>
+    <div id="top-prediction" class="prediction-top">—</div>
+    <div id="top-confidence" class="prediction-sub">Confidence: —</div>
+    <div class="prediction-bar-wrap" id="pred-bars"></div>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <div class="how-panel">
+    <div class="panel-title">How Transfer Learning Works</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">01</div>
+        <h4>Feature Extraction</h4>
+        <p>MobileNet's convolutional layers act as a frozen feature extractor — outputting a 1024-dim embedding for any image.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">02</div>
+        <h4>Sample Collection</h4>
+        <p>You hold objects in front of the camera and add labelled examples. Each frame → MobileNet → embedding vector stored.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">03</div>
+        <h4>KNN Classifier</h4>
+        <p>Instead of fine-tuning, a K-Nearest Neighbour classifier compares live embeddings to stored examples by cosine distance.</p>
+      </div>
+      <div class="step">
+        <div class="step-num">04</div>
+        <h4>Live Inference</h4>
+        <p>Every frame is classified in &lt;16 ms. Confidence bars show class probabilities from KNN vote counts.</p>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+const PALETTE = ['#b8ff57','#57d4ff','#ff7c57','#c457ff','#ffd557'];
+let mobileNet = null;
+let classifier = null;
+let videoStream = null;
+let predictionLoop = null;
+let capturing = null; // { classIdx, intervalId }
+
+const classes = [
+  { name: 'Apple',  samples: 0 },
+  { name: 'Banana', samples: 0 },
+  { name: 'Orange', samples: 0 },
+];
+
+// ── DOM refs ───────────────────────────────────────────────────────────────
+const video        = document.getElementById('webcam');
+const camOverlay   = document.getElementById('cam-overlay');
+const statusDot    = document.getElementById('status-dot');
+const statusText   = document.getElementById('status-text');
+const logEl        = document.getElementById('log');
+const classesList  = document.getElementById('classes-list');
+const addClassBtn  = document.getElementById('add-class-btn');
+const trainBtn     = document.getElementById('train-btn');
+const stopBtn      = document.getElementById('stop-btn');
+const resetBtn     = document.getElementById('reset-btn');
+const resultsPanel = document.getElementById('results-panel');
+
+// ── Logging ────────────────────────────────────────────────────────────────
+function log(msg) {
+  logEl.innerHTML += `<div>› ${msg}</div>`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ── Model Init ─────────────────────────────────────────────────────────────
+async function initModel() {
+  setStatus('loading', 'Loading MobileNet…');
+  try {
+    mobileNet = await mobilenet.load({ version: 2, alpha: 1.0 });
+    classifier = knnClassifier.create();
+    setStatus('ready', 'Model ready — camera off');
+    log('MobileNet loaded (v2 α1.0)');
+    log('KNN classifier initialised');
+    updateTrainBtn();
+  } catch (e) {
+    setStatus('error', 'Failed to load model');
+    log('Error: ' + e.message);
+  }
+}
+
+function setStatus(state, msg) {
+  statusDot.className = 'dot ' + state;
+  statusText.textContent = msg;
+}
+
+// ── Camera ─────────────────────────────────────────────────────────────────
+document.getElementById('start-cam-btn').onclick = startCamera;
+
+async function startCamera() {
+  try {
+    videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    video.srcObject = videoStream;
+    await video.play();
+    camOverlay.style.display = 'none';
+    setStatus('ready', 'Camera active — collect samples');
+    log('Camera started');
+    updateTrainBtn();
+  } catch (e) {
+    log('Camera error: ' + e.message);
+    setStatus('error', 'Camera unavailable');
+  }
+}
+
+// ── Class UI ───────────────────────────────────────────────────────────────
+function renderClasses() {
+  classesList.innerHTML = '';
+  classes.forEach((cls, i) => {
+    const color = PALETTE[i % PALETTE.length];
+    const row = document.createElement('div');
+    row.className = 'class-row';
+    row.innerHTML = `
+      <div class="class-color" style="background:${color}"></div>
+      <input class="class-name" type="text" value="${cls.name}" placeholder="Class name"
+             oninput="classes[${i}].name=this.value" />
+      <button class="add-samples-btn" id="btn-sample-${i}"
+              onmousedown="startCapture(${i})" onmouseup="stopCapture()"
+              ontouchstart="startCapture(${i})" ontouchend="stopCapture()">
+        Hold to Sample
+      </button>
+      <span class="sample-count" id="count-${i}">${cls.samples}</span>
+      <button class="remove-class" onclick="removeClass(${i})" title="Remove">✕</button>
+    `;
+    classesList.appendChild(row);
+  });
+  updateTrainBtn();
+}
+
+addClassBtn.onclick = () => {
+  classes.push({ name: `Class ${classes.length + 1}`, samples: 0 });
+  renderClasses();
+};
+
+function removeClass(i) {
+  classes.splice(i, 1);
+  renderClasses();
+}
+
+// ── Sample Capture ─────────────────────────────────────────────────────────
+function startCapture(classIdx) {
+  if (!mobileNet || !videoStream) { log('Start camera first'); return; }
+  const btn = document.getElementById(`btn-sample-${classIdx}`);
+  btn.classList.add('capturing');
+  btn.textContent = 'Capturing…';
+
+  const intervalId = setInterval(async () => {
+    const activation = mobileNet.infer(video, 'conv_pw_13_relu');
+    classifier.addExample(activation, classIdx);
+    classes[classIdx].samples++;
+    document.getElementById(`count-${classIdx}`).textContent = classes[classIdx].samples;
+    updateTrainBtn();
+  }, 100);
+
+  capturing = { classIdx, intervalId };
+}
+
+function stopCapture() {
+  if (!capturing) return;
+  clearInterval(capturing.intervalId);
+  const btn = document.getElementById(`btn-sample-${capturing.classIdx}`);
+  if (btn) { btn.classList.remove('capturing'); btn.textContent = 'Hold to Sample'; }
+  log(`Class "${classes[capturing.classIdx].name}" — ${classes[capturing.classIdx].samples} samples`);
+  capturing = null;
+}
+
+// ── Training / Prediction ──────────────────────────────────────────────────
+function updateTrainBtn() {
+  const hasSamples = classes.some(c => c.samples > 0);
+  const cameraOn   = !!videoStream;
+  trainBtn.disabled = !mobileNet || !hasSamples || !cameraOn;
+}
+
+trainBtn.onclick = () => {
+  if (!classifier || classifier.getNumClasses() === 0) { log('No samples!'); return; }
+  resultsPanel.style.display = 'block';
+  trainBtn.disabled = true;
+  stopBtn.disabled  = false;
+  setStatus('ready', 'Predicting…');
+  log('Prediction loop started');
+  buildPredBars();
+  predictLoop();
+};
+
+stopBtn.onclick = () => {
+  if (predictionLoop) { cancelAnimationFrame(predictionLoop); predictionLoop = null; }
+  setStatus('ready', 'Prediction stopped');
+  trainBtn.disabled = false;
+  stopBtn.disabled  = true;
+  log('Prediction stopped');
+};
+
+async function predictLoop() {
+  if (!classifier || classifier.getNumClasses() === 0) return;
+  const activation = mobileNet.infer(video, 'conv_pw_13_relu');
+  const result = await classifier.predictClass(activation);
+
+  const topIdx  = parseInt(result.label);
+  const topName = classes[topIdx]?.name || result.label;
+  const topConf = (result.confidences[topIdx] * 100).toFixed(1);
+
+  document.getElementById('top-prediction').textContent = topName;
+  document.getElementById('top-confidence').textContent = `Confidence: ${topConf}%`;
+
+  // update bars
+  classes.forEach((cls, i) => {
+    const bar = document.getElementById(`bar-${i}`);
+    const pct = document.getElementById(`pct-${i}`);
+    if (!bar) return;
+    const conf = (result.confidences[i] || 0) * 100;
+    bar.style.width = conf.toFixed(1) + '%';
+    pct.textContent = conf.toFixed(0) + '%';
+  });
+
+  predictionLoop = requestAnimationFrame(predictLoop);
+}
+
+function buildPredBars() {
+  const wrap = document.getElementById('pred-bars');
+  wrap.innerHTML = '';
+  classes.forEach((cls, i) => {
+    const color = PALETTE[i % PALETTE.length];
+    wrap.innerHTML += `
+      <div class="pred-row">
+        <span class="pred-label">${cls.name}</span>
+        <div class="pred-bar-bg">
+          <div class="pred-bar" id="bar-${i}" style="width:0%;background:${color}"></div>
+        </div>
+        <span class="pred-pct" id="pct-${i}">0%</span>
+      </div>`;
+  });
+}
+
+// ── Reset ──────────────────────────────────────────────────────────────────
+resetBtn.onclick = () => {
+  if (predictionLoop) { cancelAnimationFrame(predictionLoop); predictionLoop = null; }
+  if (classifier) classifier.clearAllClasses();
+  classes.forEach(c => c.samples = 0);
+  renderClasses();
+  resultsPanel.style.display = 'none';
+  trainBtn.disabled = true;
+  stopBtn.disabled  = true;
+  setStatus('ready', videoStream ? 'Camera active — collect samples' : 'Model ready — camera off');
+  log('Reset — all samples cleared');
+};
+
+// ── Init ───────────────────────────────────────────────────────────────────
+renderClasses();
+initModel();
+</script>
+</body>
+</html>
