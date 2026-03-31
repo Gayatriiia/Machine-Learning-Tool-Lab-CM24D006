@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Emotion Detection App (TF.js)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- TensorFlow.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.16.0"></script>
+
+  <!-- Chart.js for confidence bars -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Optional Face Detection -->
+  <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <h1>Emotion Detection Web App</h1>
+
+  <div class="container">
+
+    <!-- Webcam Section -->
+    <div class="card">
+      <h2>Webcam</h2>
+      <video id="webcam" autoplay playsinline></video>
+      <button id="startCam">Start Camera</button>
+      <button id="capture">Capture & Predict</button>
+    </div>
+
+    <!-- Upload Section -->
+    <div class="card">
+      <h2>Upload Image</h2>
+      <input type="file" id="upload" accept="image/*">
+      <img id="preview">
+      <button id="predictUpload">Predict</button>
+    </div>
+
+    <!-- Results -->
+    <div class="card">
+      <h2>Prediction</h2>
+      <h3 id="finalEmotion">---</h3>
+      <canvas id="chart"></canvas>
+    </div>
+
+    <!-- History -->
+    <div class="card">
+      <h2>Prediction History</h2>
+      <ul id="history"></ul>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
